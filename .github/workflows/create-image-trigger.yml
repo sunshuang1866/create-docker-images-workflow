@@ -1,0 +1,232 @@
+name: "create-image: 新增上游软件包镜像"
+
+on:
+  repository_dispatch:
+    types: [create-image]
+
+# 同一个软件包串行，避免并发冲突
+concurrency:
+  group: create-image-${{ github.event.client_payload.package_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PACKAGE_NAME:     ${{ github.event.client_payload.package_name }}
+  SOURCE_REPO_URL:  ${{ github.event.client_payload.source_repo_url }}
+  DOMAIN:           ${{ github.event.client_payload.domain }}
+  CATEGORY:         ${{ github.event.client_payload.category }}
+  OS_VERSION:       ${{ vars.OS_VERSION || '24.03-lts-sp3' }}
+  OS_TAG:           ${{ vars.OS_TAG || 'oe2403sp3' }}
+  SOURCE_REPO:      ${{ github.event.client_payload.repo }}
+  FORK_REPO:        ${{ github.event.client_payload.fork_repo }}
+  BASE_BRANCH:      ${{ github.event.client_payload.base_branch || 'master' }}
+  ISSUE_NUMBER:     ${{ github.event.client_payload.issue_number }}
+  DONE_LABEL:       ${{ github.event.client_payload.done_label || 'image-created' }}
+  CREATING_LABEL:   ${{ github.event.client_payload.creating_label || 'image-creating' }}
+  GITCODE_TOKEN:    ${{ secrets.GITCODE_TOKEN }}
+  GIT_USER_NAME:    ${{ vars.GIT_COMMIT_NAME || 'github-actions[bot]' }}
+  GIT_USER_EMAIL:   ${{ vars.GIT_COMMIT_EMAIL || 'github-actions[bot]@users.noreply.github.com' }}
+
+jobs:
+  create-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Checkout workflow repo ──────────────────────────────────
+      - name: Checkout create-docker-images-workflow
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── 2. Clone openeuler-docker-images fork ─────────────────────
+      - name: Clone openeuler-docker-images fork
+        run: |
+          git clone --depth=1 \
+            https://oauth2:${{ secrets.GITCODE_TOKEN }}@gitcode.com/${FORK_REPO}.git \
+            image-repo
+          cd image-repo
+          git config user.name  "$GIT_USER_NAME"
+          git config user.email "$GIT_USER_EMAIL"
+
+      # ── 3. Setup Python + dependencies ───────────────────────────
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. Setup Node + Claude Code ──────────────────────────────
+      - name: Setup Claude Code credentials
+        env:
+          CLAUDE_CREDENTIALS_JSON: ${{ secrets.CLAUDE_CREDENTIALS_JSON }}
+        run: |
+          mkdir -p ~/.claude
+          echo "$CLAUDE_CREDENTIALS_JSON" > ~/.claude/.credentials.json
+          chmod 600 ~/.claude/.credentials.json
+
+      - name: Install Claude Code
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      # ── 5. Run image creation via Claude Code ────────────────────
+      - name: Create image files
+        id: create_image
+        env:
+          IMAGE_REPO_DIR: ${{ github.workspace }}/image-repo
+          AI_MODEL: ${{ vars.AI_MODEL || 'claude-sonnet-4-6' }}
+          AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS || '1800000' }}
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
+        run: python scripts/stages/create-image.py
+
+      # ── 6. Git: commit & push to new branch ──────────────────────
+      - name: Commit and push to new branch
+        if: steps.create_image.outputs.success == 'true'
+        id: git_push
+        run: |
+          cd image-repo
+          BRANCH="add-${{ steps.create_image.outputs.package_name }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          git checkout -b "$BRANCH"
+
+          # 移除可能遗留的 AI 工作产物
+          for pattern in ".claude" ".opencode" "__pycache__" "ai-result.json"; do
+            find . -name "$pattern" -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
+          done
+
+          git add ${CATEGORY}/
+          git status
+
+          git commit -m "add ${{ steps.create_image.outputs.package_name }} ${{ steps.create_image.outputs.version }} docker image on openEuler ${OS_VERSION}"
+
+          git remote set-url origin \
+            https://oauth2:${{ secrets.GITCODE_TOKEN }}@gitcode.com/${FORK_REPO}.git
+          git push origin "$BRANCH"
+          echo "✅ Pushed branch $BRANCH"
+
+      # ── 7. Create PR on GitCode ───────────────────────────────────
+      - name: Create Pull Request
+        if: steps.create_image.outputs.success == 'true'
+        id: create_pr
+        run: |
+          python - <<'EOF'
+          import os, sys, json, requests
+
+          GITCODE_BASE = "https://gitcode.com"
+          token = os.environ['GITCODE_TOKEN']
+          source_repo = os.environ['SOURCE_REPO']          # openeuler/openeuler-docker-images
+          fork_repo   = os.environ['FORK_REPO']            # sunshuang1866/openeuler-docker-images
+          base_branch = os.environ['BASE_BRANCH']
+          branch      = os.environ['BRANCH']
+          pkg         = os.environ['PACKAGE_NAME']
+          version     = os.environ['VERSION']
+          category    = os.environ['CATEGORY']
+          source_url  = os.environ['SOURCE_REPO_URL']
+          issue_num   = os.environ['ISSUE_NUMBER']
+          os_ver      = os.environ['OS_VERSION']
+
+          owner, name = source_repo.split('/', 1)
+          fork_owner  = fork_repo.split('/')[0]
+
+          title = f"add {pkg} {version} docker image on openEuler {os_ver.upper().replace('-', ' ')}"
+          body  = (
+              f"## Summary\n"
+              f"- Add **{pkg} v{version}** upstream package under `{category}/{pkg}/`\n"
+              f"- Source repository: {source_url}\n"
+              f"- Supports amd64 and arm64 architectures on openEuler {os_ver}\n\n"
+              f"## Test plan\n"
+              f"- [ ] Verify Dockerfile builds successfully on amd64\n"
+              f"- [ ] Verify Dockerfile builds successfully on arm64\n\n"
+              f"Closes #{issue_num}\n\n"
+              f"> 🤖 Auto-generated by [create-docker-images-workflow]"
+          )
+
+          # head 格式: fork_owner:branch
+          head = f"{fork_owner}:{branch}"
+
+          url = f"{GITCODE_BASE}/api/v5/repos/{owner}/{name}/pulls"
+          resp = requests.post(url,
+                               params={'access_token': token},
+                               json={'title': title, 'body': body,
+                                     'head': head, 'base': base_branch},
+                               timeout=30)
+          if resp.ok:
+              pr = resp.json()
+              pr_url = pr.get('html_url') or pr.get('url', '')
+              print(f"✅ PR created: {pr_url}")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"pr_url={pr_url}\n")
+                  f.write(f"pr_number={pr.get('number', '')}\n")
+          elif 'already exists' in resp.text.lower() or resp.status_code == 409:
+              print("✅ PR already exists")
+          else:
+              print(f"❌ PR creation failed HTTP {resp.status_code}: {resp.text[:300]}")
+              sys.exit(1)
+          EOF
+        env:
+          BRANCH:      ${{ steps.git_push.outputs.branch }}
+          VERSION:     ${{ steps.create_image.outputs.version }}
+          PACKAGE_NAME: ${{ steps.create_image.outputs.package_name }}
+
+      # ── 8. Comment on GitCode issue ───────────────────────────────
+      - name: Comment on issue
+        if: always() && env.ISSUE_NUMBER != ''
+        run: |
+          python - <<'EOF'
+          import os, requests
+
+          GITCODE_BASE = "https://gitcode.com"
+          token       = os.environ['GITCODE_TOKEN']
+          source_repo = os.environ['SOURCE_REPO']
+          issue_num   = int(os.environ['ISSUE_NUMBER'])
+          pr_url      = os.environ.get('PR_URL', '')
+          success     = os.environ.get('SUCCESS', 'false') == 'true'
+          pkg         = os.environ['PACKAGE_NAME']
+
+          owner, name = source_repo.split('/', 1)
+
+          if success and pr_url:
+              body = (
+                  f"🤖 已自动为 **{pkg}** 创建 PR：{pr_url}\n\n"
+                  f"请 review 后合并，或根据需要调整 Dockerfile 内容。"
+              )
+              done_label = os.environ.get('DONE_LABEL', 'image-created')
+              # 添加 done 标签
+              requests.post(
+                  f"{GITCODE_BASE}/api/v5/repos/{owner}/{name}/issues/{issue_num}/labels",
+                  params={'access_token': token},
+                  json=[done_label], timeout=30,
+              )
+          else:
+              body = (
+                  f"⚠️ 自动创建 **{pkg}** 镜像文件失败，请查看 "
+                  f"[workflow 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) "
+                  f"了解详情，或手动创建。"
+              )
+
+          url = f"{GITCODE_BASE}/api/v5/repos/{owner}/{name}/issues/{issue_num}/comments"
+          resp = requests.post(url, params={'access_token': token}, json={'body': body}, timeout=30)
+          if resp.ok:
+              print(f"✅ Comment posted on issue #{issue_num}")
+          else:
+              print(f"⚠️  Comment failed HTTP {resp.status_code}: {resp.text[:200]}")
+          EOF
+        env:
+          PR_URL:      ${{ steps.create_pr.outputs.pr_url }}
+          SUCCESS:     ${{ steps.create_image.outputs.success }}
+          PACKAGE_NAME: ${{ steps.create_image.outputs.package_name || env.PACKAGE_NAME }}
+
+      # ── 9. Mark failed ────────────────────────────────────────────
+      - name: Mark failed
+        if: failure()
+        run: echo "⚠️ create-image failed for $PACKAGE_NAME, check workflow logs"

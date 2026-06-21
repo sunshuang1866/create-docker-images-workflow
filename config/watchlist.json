@@ -1,0 +1,18 @@
+{
+  "watched_repos": [
+    {
+      "repo": "https://gitcode.com/openeuler/openeuler-docker-images",
+      "fork_repo": "sunshuang1866/openeuler-docker-images",
+      "base_branch": "master",
+      "trigger_label": "new-image",
+      "creating_label": "image-creating",
+      "done_label": "image-created",
+      "enabled": true,
+      "description": "openEuler 官方容器镜像仓库，自动为新增上游软件包创建 Dockerfile 和 PR"
+    }
+  ],
+  "settings": {
+    "poll_interval_hours": 1,
+    "max_events_per_run": 5
+  }
+}
