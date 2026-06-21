@@ -5,7 +5,7 @@
 ## 工作流程
 
 ```
-GitCode Issue (new-image 标签)
+GitCode Issue (标题含【new-image】)
         │
         ▼ 每小时轮询
 watch-issues.yml (cron: 0 * * * *)
@@ -26,7 +26,7 @@ create-image-trigger.yml
 
 ## Issue 格式
 
-在 https://gitcode.com/openeuler/openeuler-docker-images/issues 提交 issue，添加 `new-image` 标签，正文格式（支持自由文本或结构化）：
+在 https://gitcode.com/openeuler/openeuler-docker-images/issues 提交 issue，**标题中包含 `【new-image】`** 即可触发，正文格式（支持自由文本或结构化）：
 
 **结构化格式（推荐）：**
 ```
