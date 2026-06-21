@@ -59,17 +59,19 @@ create-image-trigger.yml
 |--------|------|
 | `GITCODE_TOKEN` | GitCode Personal Access Token（读写 issues、PR） |
 | `DISPATCH_TOKEN` | GitHub PAT（用于 repository_dispatch） |
-| `CLAUDE_CREDENTIALS_JSON` | Claude Code 账号凭据 (`~/.claude/.credentials.json`) |
-| `ANTHROPIC_API_KEY` | 可选，若使用 API Key 方式认证 |
+| `AI_API_KEY` | AI API Key。默认用 DeepSeek，填 DeepSeek API Key；切换 Claude 时填 Anthropic Key |
+| `CLAUDE_CREDENTIALS_JSON` | 仅当 `AI_RUNNER=claude-code-account` 时需要（Claude.ai 账号 OAuth 凭据） |
 
 ## GitHub Variables（可选）
 
 | Variable | 默认值 | 说明 |
 |----------|--------|------|
+| `AI_RUNNER` | `opencode` | AI 后端：`opencode`（DeepSeek）/ `claude-code` / `claude-code-account` |
+| `AI_MODEL` | `deepseek/deepseek-v4-pro` | 模型名称，opencode 格式如 `deepseek/deepseek-v4-pro` |
+| `AI_TIMEOUT_MS` | `1800000` | AI 执行超时（毫秒） |
+| `OPENAI_BASE_URL` | _(空，使用默认)_ | 自定义 API 代理地址（可选） |
 | `OS_VERSION` | `24.03-lts-sp3` | openEuler 版本 |
 | `OS_TAG` | `oe2403sp3` | 镜像 Tag 后缀 |
-| `AI_MODEL` | `claude-sonnet-4-6` | Claude 模型 |
-| `AI_TIMEOUT_MS` | `1800000` | Claude Code 超时（毫秒） |
 | `GIT_COMMIT_NAME` | `github-actions[bot]` | Git 提交用户名 |
 | `GIT_COMMIT_EMAIL` | `github-actions[bot]@...` | Git 提交邮箱 |
 
