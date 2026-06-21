@@ -2,8 +2,8 @@
 """
 Issue 监控 — 新增镜像请求自动触发器
 
-轮询 watchlist 中的仓库 issues，检测带有 trigger_label 的 open issues，
-跳过已有 creating_label 或 done_label 的 issue（避免重复处理），
+轮询 watchlist 中的仓库 issues，检测标题中包含 trigger_title_keyword（默认「new-image」）
+的 open issues，跳过已有 creating_label 或 done_label 的 issue（避免重复处理），
 解析 issue 正文提取 package_name / source_repo / domain，
 向 GitHub Actions 发送 repository_dispatch 触发 create-image-trigger workflow。
 """
@@ -20,7 +20,8 @@ PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 sys.path.insert(0, PROJECT_ROOT)
 
 from scripts.lib.gitcode_issues_api import (
-    fetch_open_issues, get_issue_labels, add_issue_label,
+    fetch_all_open_issues, filter_issues_by_title,
+    get_issue_labels, add_issue_label,
     add_issue_comment, parse_issue_body,
 )
 
@@ -81,20 +82,21 @@ def process_all():
         repo = repo_config['repo']
         fork_repo = repo_config.get('fork_repo', '')
         base_branch = repo_config.get('base_branch', 'master')
-        trigger_label = repo_config.get('trigger_label', 'new-image')
+        trigger_keyword = repo_config.get('trigger_title_keyword', '【new-image】')
         creating_label = repo_config.get('creating_label', 'image-creating')
         done_label = repo_config.get('done_label', 'image-created')
 
         log(f"\n{'='*60}")
-        log(f"📦 {repo}  trigger_label={trigger_label}")
+        log(f"📦 {repo}  trigger_keyword={trigger_keyword}")
 
         try:
-            issues = fetch_open_issues(repo, trigger_label, gitcode_token)
+            all_issues = fetch_all_open_issues(repo, gitcode_token)
+            issues = filter_issues_by_title(all_issues, trigger_keyword)
         except Exception as e:
             log(f"  ❌ Failed to fetch issues: {e}")
             continue
 
-        log(f"  Found {len(issues)} issue(s) with '{trigger_label}' label")
+        log(f"  Found {len(issues)} issue(s) with '{trigger_keyword}' in title")
 
         for issue in issues:
             if total_dispatched >= max_events:

@@ -4,7 +4,7 @@
       "repo": "https://gitcode.com/openeuler/openeuler-docker-images",
       "fork_repo": "sunshuang1866/openeuler-docker-images",
       "base_branch": "master",
-      "trigger_label": "new-image",
+      "trigger_title_keyword": "【new-image】",
       "creating_label": "image-creating",
       "done_label": "image-created",
       "enabled": true,

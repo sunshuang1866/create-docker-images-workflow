@@ -21,12 +21,12 @@ def parse_repo(repo: str):
 
 # ── Issue 查询 ──
 
-def fetch_open_issues(repo: str, label: str, token: str, max_issues: int = 50) -> List[Dict]:
+def fetch_all_open_issues(repo: str, token: str, max_issues: int = 100) -> List[Dict]:
+    """获取仓库全部 open issues（不过滤标签），由调用方按标题关键词过滤。"""
     owner, name = parse_repo(repo)
     url = f"{GITCODE_BASE}/api/v5/repos/{owner}/{name}/issues"
     params = {
         'state': 'open',
-        'labels': label,
         'per_page': min(max_issues, 100),
         'sort': 'created',
         'direction': 'desc',
@@ -36,6 +36,12 @@ def fetch_open_issues(repo: str, label: str, token: str, max_issues: int = 50) -
     resp.raise_for_status()
     data = resp.json()
     return data if isinstance(data, list) else []
+
+
+def filter_issues_by_title(issues: List[Dict], keyword: str) -> List[Dict]:
+    """过滤标题中包含 keyword 的 issues（大小写不敏感）。"""
+    kw = keyword.lower()
+    return [i for i in issues if kw in (i.get('title') or '').lower()]
 
 
 def get_issue_labels(issue: Dict) -> List[str]:
