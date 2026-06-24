@@ -153,7 +153,7 @@ CMD ["./{binary}"]
   path: {version}/{os_version}/Dockerfile
 ```
 
-### 步骤 7：编写 README.md（英文）
+### 步骤 7：编写 README.md（**纯英文，禁止出现任何中文**）
 
 参照仓库内同类包的 README.md，结构如下：
 
@@ -162,9 +162,9 @@ CMD ["./{binary}"]
 
 - The official {PackageName} docker image.
 
-- Maintained by: [openEuler CloudNative SIG](https://gitee.com/openeuler/cloudnative).
+- Maintained by: [openEuler CloudNative SIG](https://atomgit.com/openeuler/cloudnative).
 
-- Where to get help: [openEuler CloudNative SIG](https://gitee.com/openeuler/cloudnative), [openEuler](https://gitee.com/openeuler/community).
+- Where to get help: [openEuler CloudNative SIG](https://atomgit.com/openeuler/cloudnative), [openEuler](https://atomgit.com/openeuler/community).
 
 # {PackageName} | openEuler
 Current {package_name} images are built on the [openEuler](https://repo.openeuler.org/). This repository is free to use and exempted from per-user rate limits.
@@ -179,19 +179,27 @@ The tag of each `{package_name}` docker image is consist of the version of `{pac
 | [{version}-{os_tag}](...Dockerfile链接...) | {PackageName} {version} on openEuler {OS大写} | amd64, arm64 |
 
 # Usage
-...（使用示例，参考同类包）
+In this usage, users can select the corresponding `{Tag}` based on their requirements.
+
+- Pull the `openeuler/{package_name}` image from docker
+
+	```
+	docker pull openeuler/{package_name}:{Tag}
+	```
+
+- {其他使用步骤，参考同类包，镜像标签统一用 `{Tag}` 占位}
 
 # Question and answering
-If you have any questions or want to use some special features, please submit an issue or a pull request on [openeuler-docker-images](https://gitee.com/openeuler/openeuler-docker-images).
+If you have any questions or want to use some special features, please submit an issue or a pull request on [openeuler-docker-images](https://atomgit.com/openeuler/openeuler-docker-images).
 ```
 
-Dockerfile 链接格式：`https://gitee.com/openeuler/openeuler-docker-images/blob/master/{category}/{package_name}/{version}/{os_version}/Dockerfile`
+Dockerfile 链接格式：`https://atomgit.com/openeuler/openeuler-docker-images/blob/master/{category}/{package_name}/{version}/{os_version}/Dockerfile`
 
 ### 步骤 8：编写 doc/image-info.yml（中文）
 
 ```yaml
 name: {package_name}
-category: {category小写}
+category: {category的小写形式，如 cloud / ai / bigdata / database / hpc / security / storage}
 description: {中文描述，2-3句话，介绍软件包功能和特点}
 environment: |
   本应用在Docker环境中运行，安装Docker执行如下命令
@@ -203,7 +211,7 @@ tags: |
 
   |    Tag   |  Currently  |   Architectures  |
   |----------|-------------|------------------|
-  |[{version}-{os_tag}](Dockerfile链接) | {PackageName} {version} on openEuler {OS} | amd64, arm64 |
+  |[{version}-{os_tag}](https://atomgit.com/openeuler/openeuler-docker-images/blob/master/{category}/{package_name}/{version}/{os_version}/Dockerfile) | {PackageName} {version} on openEuler {OS} | amd64, arm64 |
 
 download: |
   拉取镜像到本地
@@ -212,7 +220,7 @@ download: |
   ```
 
 usage: |
-  {中文使用说明，与README.md保持一致}
+  {中文使用说明，与README.md保持一致，镜像标签统一用 {Tag} 占位，不要写具体版本号}
 
 license: {License}
 similar_packages:
@@ -223,8 +231,8 @@ dependency:
 homepage: {source_repo_url}
 upstream:
   version_url: {owner}/{repo}
-  version_prefix: v
-  version_filter: rc;alpha;beta
+  version_prefix: v          # 仅当上游 tag 以 v 开头（如 v1.0.0）时保留此行；否则删除
+  version_filter: rc;beta;alpha
   backend: GitHub
   version_scheme: RPM
 ```
@@ -293,7 +301,11 @@ curl -fSL "https://github.com/{owner}.png?size=200" -o logo.png
 2. meta.yml 的 path 与实际 Dockerfile 路径一致
 3. README.md 和 image-info.yml 中的 Tag 表格与 meta.yml 保持一致
 4. image-list.yml 已添加新条目且格式正确（缩进为 2 空格）
-5. logo.png 文件存在（非空）
+5. `doc/picture/logo.png` 文件存在且非空
+6. README.md 和 image-info.yml 中所有 SIG / 仓库链接均为 `atomgit.com`，不含 `gitee.com`
+7. image-info.yml 的 `category` 字段值为**全小写**
+8. README.md 和 image-info.yml 的 usage / download 示例中镜像标签使用 `{Tag}` 占位
+9. README.md 中不含任何中文字符
 
 ---
 
@@ -305,3 +317,8 @@ curl -fSL "https://github.com/{owner}.png?size=200" -o logo.png
 - **中文描述要准确、专业，不要机器翻译腔**
 - **如果无法确定某个构建细节**（如 Go 版本），先从 go.mod 获取，不要猜测
 - **禁止在 Dockerfile 中硬编码架构（如 amd64）**，必须通过 ARG TARGETARCH 参数化
+- **logo 必须存在**：`doc/picture/logo.png` 文件必须创建且非空，无论是从上游下载还是 fallback 到组织头像
+- **链接域名必须是 atomgit.com**：README.md 和 image-info.yml 中的 SIG 链接、仓库链接、Dockerfile 链接一律使用 `atomgit.com`，**严禁使用 gitee.com**
+- **category 字段必须全小写**：image-info.yml 中 `category:` 的值必须是小写，如 `cloud`、`ai`、`bigdata`，不得出现 `Cloud`、`AI` 等大写形式
+- **usage 中镜像标签用 `{Tag}` 占位**：README.md 的 Usage 和 image-info.yml 的 usage / download 示例中，镜像标签统一写 `{Tag}`，不得替换成具体版本号
+- **README.md 必须是纯英文**：文件内容全部使用英文，不得出现任何中文字符
