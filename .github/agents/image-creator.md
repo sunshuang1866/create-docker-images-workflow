@@ -140,11 +140,37 @@ RUN wget https://github.com/{owner}/{repo}/releases/download/v${VERSION}/{pkg}_$
 CMD ["./{binary}"]
 ```
 
-**注意事项：**
+**Dockerfile 注意事项：**
 - 使用 `dnf` (openEuler 24.03) 而非 `apt`
 - Go 下载地址用 `https://golang.google.cn/dl/` (中国镜像)
 - 最后一定要 `dnf clean all` 清理缓存
 - 支持 amd64 和 arm64，通过 `${TARGETARCH}` 区分
+- **ARG 不是 shell 变量**：下载 URL 中不能写 `${VERSION}`，必须在 ARG 行定义默认值后用 `${VERSION}` 引用，或直接硬编码版本号在 URL 里（ARG 只在 RUN 中生效）
+- **dnf remove 仅限 `wget gcc make`**：不得移除 `git`、`cmake`、`python3` 等，否则会级联卸载 systemd 等系统组件
+- **`groupadd`/`useradd` 加 `2>/dev/null || true`**：避免用户已存在时报错中断构建
+- **`ENTRYPOINT` 和 `CMD` 都要写**：有明确入口点时两者并用
+
+**openEuler 包名映射（Debian→RPM）：**
+
+| Debian/Ubuntu | openEuler RPM |
+|---------------|---------------|
+| `libssl-dev` | `openssl-devel` |
+| `build-essential` | `gcc gcc-c++ make` |
+| `shadow` | `shadow-utils` |
+| `python3-dev` | `python3-devel` |
+| `libcurl4-openssl-dev` | `libcurl-devel` |
+| `libffi-dev` | `libffi-devel` |
+| `libpcre3-dev` | `pcre-devel` |
+| `libncurses5-dev` | `ncurses-devel` |
+
+**openEuler 上不存在的包（禁止使用，需从源码安装或用替代方案）：**
+`clang-tools-extra`、`gmock-devel`、`gtest-devel`、`libdwarf-devel`、`gperftools-devel`
+
+**运行时依赖不满足时的处理策略：**
+- Go 版本不足 → 从 `https://golang.google.cn/dl/` 下载官方二进制
+- Python 版本不足 → 从 `https://www.python.org/ftp/python/` 下载源码编译
+- Node.js → 从 `https://nodejs.org/dist/` 下载官方二进制
+- **禁止修改上游 go.mod / CMakeLists.txt 降级依赖版本**
 
 ### 步骤 6：编写 meta.yml
 
@@ -187,7 +213,31 @@ In this usage, users can select the corresponding `{Tag}` based on their require
 	docker pull openeuler/{package_name}:{Tag}
 	```
 
-- {其他使用步骤，参考同类包，镜像标签统一用 `{Tag}` 占位}
+- Start a {package_name} instance
+
+	```
+	docker run -d --name my-{package_name} ... openeuler/{package_name}:{Tag}
+	```
+
+- Container startup options
+
+	| Option | Description |
+	|--------|-------------|
+	| ... | ... |
+
+- View container running logs
+
+	```
+	docker logs -f my-{package_name}
+	```
+
+- To get an interactive shell
+
+	```
+	docker exec -it my-{package_name} /bin/bash
+	```
+
+**注意：README 中所有代码块必须用 TAB 缩进（不是空格），参考以上模板格式。**
 
 # Question and answering
 If you have any questions or want to use some special features, please submit an issue or a pull request on [openeuler-docker-images](https://atomgit.com/openeuler/openeuler-docker-images).
@@ -225,6 +275,8 @@ usage: |
 license: {License}
 similar_packages:
   - {同类软件1}: {简短说明}
+  - {同类软件2}: {简短说明}
+  - {同类软件3}: {简短说明}
 dependency:
   - {依赖项}
 
@@ -248,9 +300,20 @@ curl -fSL "https://raw.githubusercontent.com/{owner}/{repo}/master/docs/media/{p
 # 2. CNCF artwork（适用于 CNCF 项目）
 curl -fSL "https://raw.githubusercontent.com/cncf/artwork/main/projects/{pkg}/icon/color/{pkg}-icon-color.png" -o logo.png
 
-# 3. GitHub 组织头像（最终 fallback）
+# 3. GitHub 组织头像
 curl -fSL "https://github.com/{owner}.png?size=200" -o logo.png
+
+# 4. 以上均失败时：用 Pillow 生成白底黑字占位图（400×200px）
+python3 -c "
+from PIL import Image, ImageDraw, ImageFont
+img = Image.new('RGB', (400, 200), 'white')
+draw = ImageDraw.Draw(img)
+draw.text((200, 100), '{package_name}', fill='black', anchor='mm')
+img.save('logo.png')
+"
 ```
+
+**禁止使用 AI 生成的 logo**；fallback 时用上述 Pillow 脚本生成简单文字图片。
 
 ### 步骤 10：更新 {category}/image-list.yml
 
@@ -297,15 +360,20 @@ curl -fSL "https://github.com/{owner}.png?size=200" -o logo.png
 ## 三、质量检查
 
 完成文件创建后，验证以下内容：
-1. Dockerfile 中所有 ARG 变量都已正确定义
+1. Dockerfile 中所有 ARG 变量都已正确定义，下载 URL 能正确展开
 2. meta.yml 的 path 与实际 Dockerfile 路径一致
 3. README.md 和 image-info.yml 中的 Tag 表格与 meta.yml 保持一致
-4. image-list.yml 已添加新条目且格式正确（缩进为 2 空格）
+4. image-list.yml 已添加新条目且格式正确（缩进为 2 空格，位于 `images:` key 下）
 5. `doc/picture/logo.png` 文件存在且非空
 6. README.md 和 image-info.yml 中所有 SIG / 仓库链接均为 `atomgit.com`，不含 `gitee.com`
 7. image-info.yml 的 `category` 字段值为**全小写**
 8. README.md 和 image-info.yml 的 usage / download 示例中镜像标签使用 `{Tag}` 占位
 9. README.md 中不含任何中文字符
+10. README.md 中代码块使用 TAB 缩进（非空格）
+11. README.md Usage 包含 docker pull / docker run / docker logs / docker exec 四个标准环节
+12. image-info.yml 的 `similar_packages` 有 3 条以上
+13. image-info.yml 字段顺序：name → category → description → environment → tags → download → usage → license → similar_packages → dependency → homepage → upstream
+14. Dockerfile 中只移除了 `wget gcc make`，未移除 `git`、`cmake`、`python3` 等
 
 ---
 
@@ -322,3 +390,10 @@ curl -fSL "https://github.com/{owner}.png?size=200" -o logo.png
 - **category 字段必须全小写**：image-info.yml 中 `category:` 的值必须是小写，如 `cloud`、`ai`、`bigdata`，不得出现 `Cloud`、`AI` 等大写形式
 - **usage 中镜像标签用 `{Tag}` 占位**：README.md 的 Usage 和 image-info.yml 的 usage / download 示例中，镜像标签统一写 `{Tag}`，不得替换成具体版本号
 - **README.md 必须是纯英文**：文件内容全部使用英文，不得出现任何中文字符
+- **README 代码块必须用 TAB 缩进**：所有代码块前的缩进字符必须是 TAB，不得用空格
+- **README Usage 结构完整**：必须包含 pull / run / logs / exec 四个标准环节及启动参数表格
+- **image-info.yml 字段顺序强制**：name → category → description → environment → tags → download → usage → license → similar_packages → dependency → homepage → upstream，不得调换
+- **similar_packages 至少 3 条**：列举同类软件及简短中文说明
+- **dnf/yum remove 仅限 `wget gcc make`**：禁止移除 git、cmake、python3 等，否则级联破坏系统
+- **禁止修改上游构建配置**：不得改动 go.mod、CMakeLists.txt 等以降级依赖，应从官方源下载合适版本的工具链
+- **logo 禁止 AI 生成**：找不到官方 logo 时用 Pillow 生成 400×200px 白底黑字图片
