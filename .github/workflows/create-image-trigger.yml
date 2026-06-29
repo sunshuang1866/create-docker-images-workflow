@@ -156,7 +156,8 @@ jobs:
           issue_num   = os.environ['ISSUE_NUMBER']
           os_ver      = os.environ['OS_VERSION']
 
-          owner, name = source_repo.split('/', 1)
+          _parts = source_repo.rstrip('/').split('/')
+          owner, name = _parts[-2], _parts[-1]
           fork_owner  = fork_repo.split('/')[0]
 
           title = f"Feat: add {pkg} {version} docker image on openEuler {os_ver.upper()}"
@@ -213,7 +214,8 @@ jobs:
           pkg         = os.environ['PACKAGE_NAME']
           run_url     = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          owner, name = source_repo.split('/', 1)
+          _parts = source_repo.rstrip('/').split('/')
+          owner, name = _parts[-2], _parts[-1]
 
           if success and pr_url:
               body = (

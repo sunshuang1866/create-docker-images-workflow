@@ -92,7 +92,7 @@ OS 目录名：`{os_version}`，例如 `24.03-lts-sp3`。
 
 ```dockerfile
 ARG BASE=openeuler/openeuler:{os_version}
-FROM ${BASE}
+FROM ${BASE} AS builder
 
 ARG TARGETARCH
 ARG VERSION={latest_version}
@@ -124,7 +124,7 @@ CMD ["{binary}"]
 
 ```dockerfile
 ARG BASE=openeuler/openeuler:{os_version}
-FROM ${BASE}
+FROM ${BASE} AS builder
 
 ARG VERSION={latest_version}
 ARG TARGETARCH
@@ -141,6 +141,7 @@ CMD ["./{binary}"]
 ```
 
 **Dockerfile 注意事项：**
+- **`ARG VERSION` 必须全大写**：版本变量名固定为 `VERSION`（不得写成 `version`、`Ver` 等），且其默认值必须与 meta.yml 中的版本号完全一致
 - 使用 `dnf` (openEuler 24.03) 而非 `apt`
 - Go 下载地址用 `https://golang.google.cn/dl/` (中国镜像)
 - 最后一定要 `dnf clean all` 清理缓存
@@ -270,7 +271,10 @@ download: |
   ```
 
 usage: |
-  {中文使用说明，与README.md保持一致，镜像标签统一用 {Tag} 占位，不要写具体版本号}
+  {中文使用说明，内容与 README.md 的 Usage 章节保持一致（步骤、命令、参数表格均相同），
+  镜像标签统一用 {Tag} 占位，不要写具体版本号。
+  注意：此字段使用 YAML 块标量（|），每行缩进必须一致，代码块用反引号包裹，
+  不得出现未转义的冒号、引号等破坏 YAML 解析的字符。}
 
 license: {License}
 similar_packages:
@@ -284,18 +288,21 @@ homepage: {source_repo_url}
 upstream:
   version_url: {owner}/{repo}
   version_prefix: v          # 仅当上游 tag 以 v 开头（如 v1.0.0）时保留此行；否则删除
-  version_filter: rc;beta;alpha
+  version_filter: alpha;rc;candidate;beta;pre
   backend: GitHub
   version_scheme: RPM
 ```
 
 ### 步骤 9：下载 Logo
 
-按优先级尝试以下来源：
+Logo **必须是软件的官方 logo**。首先遍历上游仓库 `docs/` 目录寻找官方图片（png/svg），再按以下优先级 fallback：
 
 ```bash
-# 1. 项目 docs/media 目录
-curl -fSL "https://raw.githubusercontent.com/{owner}/{repo}/master/docs/media/{pkg}_logo.png" -o logo.png
+# 1. 遍历上游仓库 docs/ 目录，寻找含 logo/icon 关键词的图片文件
+gh api repos/{owner}/{repo}/git/trees/HEAD --jq '.tree[].path' | grep -i docs | head -20
+# 找到后下载，例如：
+curl -fSL "https://raw.githubusercontent.com/{owner}/{repo}/master/docs/images/{pkg}-logo.png" -o logo.png
+# docs 下常见路径：docs/images/ docs/media/ docs/assets/ docs/static/ docs/logo/
 
 # 2. CNCF artwork（适用于 CNCF 项目）
 curl -fSL "https://raw.githubusercontent.com/cncf/artwork/main/projects/{pkg}/icon/color/{pkg}-icon-color.png" -o logo.png
@@ -374,6 +381,10 @@ img.save('logo.png')
 12. image-info.yml 的 `similar_packages` 有 3 条以上
 13. image-info.yml 字段顺序：name → category → description → environment → tags → download → usage → license → similar_packages → dependency → homepage → upstream
 14. Dockerfile 中只移除了 `wget gcc make`，未移除 `git`、`cmake`、`python3` 等
+15. image-info.yml 的 `name` 值必须与 `homepage` URL 最后一段路径完全一致（例如 `homepage: https://github.com/kubeflow/kubeflow` 则 `name: kubeflow`）
+16. image-info.yml 的 `version_filter` 必须包含所有预发布关键词：`alpha;rc;candidate;beta;pre`
+17. Dockerfile 中版本变量名必须大写 `ARG VERSION=...`，其默认值与 meta.yml 中的版本号完全一致
+18. image-info.yml 的 `usage` 字段内容与 README.md Usage 章节一致，且为合法 YAML 块标量（`|`），无破坏解析的特殊字符
 
 ---
 
@@ -397,3 +408,8 @@ img.save('logo.png')
 - **dnf/yum remove 仅限 `wget gcc make`**：禁止移除 git、cmake、python3 等，否则级联破坏系统
 - **禁止修改上游构建配置**：不得改动 go.mod、CMakeLists.txt 等以降级依赖，应从官方源下载合适版本的工具链
 - **logo 禁止 AI 生成**：找不到官方 logo 时用 Pillow 生成 400×200px 白底黑字图片
+- **logo 必须是官方图**：优先从上游仓库 `docs/` 目录下寻找含 logo/icon 关键词的图片，不得使用随机图片或 AI 生成图
+- **name 与 homepage 最后路径段严格一致**：image-info.yml 中 `name` 的值必须与 `homepage` URL 最后一个 `/` 后的名称完全相同，大小写一致
+- **version_filter 必须完整**：image-info.yml 中固定写 `version_filter: alpha;rc;candidate;beta;pre`，不得遗漏任何预发布关键词
+- **ARG VERSION 必须全大写且与 meta.yml 一致**：Dockerfile 中版本 ARG 名称固定为 `VERSION`（全大写），其默认值必须与 meta.yml 中的版本键完全相同
+- **README usage 与 image-info.yml usage 内容一致**：两者步骤、命令、参数说明相同；image-info.yml 中 `usage` 使用 YAML 块标量（`|`），缩进一致，不含破坏 YAML 解析的裸冒号或引号
