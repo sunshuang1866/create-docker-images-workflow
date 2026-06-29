@@ -93,9 +93,10 @@ def create_pull_request(repo: str, head: str, base: str, title: str, body: str, 
 _PACKAGE_PATTERNS = [
     re.compile(r'\*\*软件包名称[（(].*?[）)]?[：:]\*\*\s*(\S+)', re.IGNORECASE),
     re.compile(r'\*\*Package Name[：:]\*\*\s*(\S+)', re.IGNORECASE),
+    re.compile(r'软件包名称[^：:\n]*[：:]\s*(\S+)', re.IGNORECASE),
     re.compile(r'软件包[名称]*[：:\s]+(\S+)', re.IGNORECASE),
     re.compile(r'新增\s*(?:上游\s*)?软件包\s*[：:]?\s*(\S+)', re.IGNORECASE),
-    re.compile(r'package[:\s]+([a-zA-Z0-9_-]+)', re.IGNORECASE),
+    re.compile(r'package\s*[：:]\s*([a-zA-Z0-9_-]+)', re.IGNORECASE),
 ]
 
 _REPO_PATTERN = re.compile(r'https?://github\.com/([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)', re.IGNORECASE)
@@ -103,8 +104,9 @@ _REPO_PATTERN = re.compile(r'https?://github\.com/([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-
 _DOMAIN_PATTERNS = [
     re.compile(r'\*\*所属领域[（(].*?[）)]?[：:]\*\*\s*(.+)', re.IGNORECASE),
     re.compile(r'\*\*Domain[：:]\*\*\s*(.+)', re.IGNORECASE),
-    re.compile(r'(?:场景|领域|分类)[属于]*[：:\s]+(.+)', re.IGNORECASE),
-    re.compile(r'(?:category|domain)[:\s]+(.+)', re.IGNORECASE),
+    re.compile(r'所属领域[^：:\n]*[：:]\s*(.+)', re.IGNORECASE),
+    re.compile(r'(?:场景|领域|分类)[^：:\n]*[：:]\s*(.+)', re.IGNORECASE),
+    re.compile(r'(?:category|domain)[^：:\n]*[：:]\s*(.+)', re.IGNORECASE),
 ]
 
 # 领域 → 目录 映射
